@@ -678,7 +678,7 @@ configure_process_scheduling() {
     
     # Check if ananicy-cpp is available
     if command -v ananicy-cpp >/dev/null 2>&1; then
-        systemctl enable ananicy-cpp
+        systemctl enable ananicy-cpp.service
         
         # Add gaming-specific rules
         mkdir -p /etc/ananicy.d
@@ -729,7 +729,7 @@ configure_memory_management() {
     
     # Enable preload for faster application startup
     if command -v preload >/dev/null 2>&1; then
-        systemctl enable preload
+        systemctl enable preload.service
         log "SUCCESS" "Preload enabled for faster application startup"
     fi
     
@@ -785,7 +785,7 @@ rmmod zram >/dev/null 2>&1 || true
 echo "Gaming: ZRAM disabled"
 EOF
         
-        chmod +x /usr/local/bin/gaming-zram-*.sh
+        chmod +x /usr/local/bin/gaming-zram-setup.sh /usr/local/bin/gaming-zram-teardown.sh
         systemctl daemon-reload
         systemctl enable zram-gaming.service
         
