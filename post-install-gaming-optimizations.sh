@@ -967,7 +967,11 @@ install_desktop_environment() {
                 fi
             done
             
-            pacman -S --needed --noconfirm "${available_packages[@]}"
+            if [ ${#available_packages[@]} -gt 0 ]; then
+                pacman -S --needed --noconfirm "${available_packages[@]}"
+            else
+                log "WARNING" "No Hyprland packages available in repositories"
+            fi
             systemctl enable sddm
             
             # Create basic Hyprland config
@@ -1071,15 +1075,21 @@ EOF
             ;;
             
         kde)
-            pacman -S --needed --noconfirm plasma-meta kde-applications sddm
-            systemctl enable sddm
-            log "SUCCESS" "KDE Plasma installed"
+            if pacman -S --needed --noconfirm plasma-meta kde-applications sddm; then
+                systemctl enable sddm
+                log "SUCCESS" "KDE Plasma installed"
+            else
+                log "WARNING" "Failed to install KDE Plasma packages"
+            fi
             ;;
             
         gnome)
-            pacman -S --needed --noconfirm gnome gnome-extra gdm
-            systemctl enable gdm
-            log "SUCCESS" "GNOME installed"
+            if pacman -S --needed --noconfirm gnome gnome-extra gdm; then
+                systemctl enable gdm
+                log "SUCCESS" "GNOME installed"
+            else
+                log "WARNING" "Failed to install GNOME packages"
+            fi
             ;;
             
         i3)
@@ -1093,9 +1103,12 @@ EOF
                 lightdm
                 lightdm-gtk-greeter
             )
-            pacman -S --needed --noconfirm "${i3_packages[@]}"
-            systemctl enable lightdm
-            log "SUCCESS" "i3 window manager installed"
+            if pacman -S --needed --noconfirm "${i3_packages[@]}"; then
+                systemctl enable lightdm
+                log "SUCCESS" "i3 window manager installed"
+            else
+                log "WARNING" "Failed to install i3 packages"
+            fi
             ;;
             
         *)
@@ -1154,8 +1167,11 @@ install_gpu_drivers() {
             lib32-opencl-nvidia
         )
         
-        pacman -S --needed --noconfirm "${nvidia_packages[@]}"
-        log "SUCCESS" "NVIDIA drivers installed"
+        if pacman -S --needed --noconfirm "${nvidia_packages[@]}"; then
+            log "SUCCESS" "NVIDIA drivers installed"
+        else
+            log "WARNING" "Failed to install some NVIDIA packages"
+        fi
     fi
     
     # Install AMD drivers
@@ -1173,8 +1189,11 @@ install_gpu_drivers() {
             lib32-mesa-vdpau
         )
         
-        pacman -S --needed --noconfirm "${amd_packages[@]}"
-        log "SUCCESS" "AMD drivers installed"
+        if pacman -S --needed --noconfirm "${amd_packages[@]}"; then
+            log "SUCCESS" "AMD drivers installed"
+        else
+            log "WARNING" "Failed to install some AMD packages"
+        fi
     fi
     
     # Install Intel drivers
@@ -1189,8 +1208,11 @@ install_gpu_drivers() {
             libva-intel-driver
         )
         
-        pacman -S --needed --noconfirm "${intel_packages[@]}"
-        log "SUCCESS" "Intel drivers installed"
+        if pacman -S --needed --noconfirm "${intel_packages[@]}"; then
+            log "SUCCESS" "Intel drivers installed"
+        else
+            log "WARNING" "Failed to install some Intel packages"
+        fi
     fi
     
     # Install common graphics packages
@@ -1201,7 +1223,11 @@ install_gpu_drivers() {
         mesa-demos
     )
     
-    pacman -S --needed --noconfirm "${common_packages[@]}"
+    if pacman -S --needed --noconfirm "${common_packages[@]}"; then
+        log "SUCCESS" "Common graphics packages installed"
+    else
+        log "WARNING" "Failed to install some common graphics packages"
+    fi
     
     log "SUCCESS" "GPU drivers installation completed"
 }
@@ -1231,7 +1257,11 @@ install_audio_system() {
         pavucontrol
     )
     
-    pacman -S --needed --noconfirm "${audio_packages[@]}"
+    if pacman -S --needed --noconfirm "${audio_packages[@]}"; then
+        log "SUCCESS" "PipeWire packages installed"
+    else
+        log "WARNING" "Failed to install some PipeWire packages"
+    fi
     
     # Enable PipeWire services globally for all users
     systemctl --global enable pipewire.service
