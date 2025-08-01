@@ -296,8 +296,8 @@ install_gaming_kernel() {
     
     log "STEP" "Installing gaming-optimized kernel"
     
-    # Update package database
-    pacman -Sy
+    # Update package database and system
+    pacman -Syu --needed --noconfirm
     
     # Check if linux-zen is available
     if pacman -Si linux-zen &>/dev/null; then
@@ -400,7 +400,11 @@ configure_grub_gaming() {
     local params_string=$(IFS=' '; echo "${gaming_params[*]}")
     
     # Update GRUB configuration
-    sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"/" /etc/default/grub
+    if grep -q "GRUB_CMDLINE_LINUX_DEFAULT=" /etc/default/grub; then
+        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"/" /etc/default/grub
+    else
+        echo "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"" >> /etc/default/grub
+    fi
     
     # Regenerate GRUB configuration
     grub-mkconfig -o /boot/grub/grub.cfg
@@ -747,6 +751,10 @@ ZRAM_DEVICE="/dev/zram0"
 
 # Create zram device
 modprobe zram 2>/dev/null || true
+# Ensure zram device exists (some kernels need explicit creation)
+if [ ! -e /dev/zram0 ] && [ -w /sys/class/zram-control/hot_add ]; then
+    echo 1 > /sys/class/zram-control/hot_add 2>/dev/null || true
+fi
 echo $ZRAM_SIZE > /sys/block/zram0/disksize 2>/dev/null || true
 mkswap $ZRAM_DEVICE >/dev/null 2>&1 || true
 swapon $ZRAM_DEVICE -p 10 >/dev/null 2>&1 || true
@@ -863,17 +871,20 @@ install_gaming_applications() {
         log "SUCCESS" "Gaming applications installed: ${available_packages[*]}"
     fi
     
-    # Enable GameMode service
+    # Enable GameMode service globally (for all users)
     if command -v gamemoded >/dev/null 2>&1; then
-        systemctl --user enable gamemoded
-        log "SUCCESS" "GameMode service enabled"
+        systemctl --global enable gamemoded
+        log "SUCCESS" "GameMode service enabled globally"
     fi
     
     # Enable Tailscale service
     if command -v tailscale >/dev/null 2>&1; then
         systemctl enable tailscaled
-        systemctl start tailscaled
-        log "SUCCESS" "Tailscale service enabled and started"
+        if systemctl start tailscaled; then
+            log "SUCCESS" "Tailscale service enabled and started"
+        else
+            log "WARNING" "Tailscale service enabled but failed to start (may need reboot)"
+        fi
         log "INFO" "Run 'sudo tailscale up' to connect to your Tailscale network"
     fi
     
@@ -1207,7 +1218,7 @@ install_audio_system() {
     
     pacman -S --needed --noconfirm "${audio_packages[@]}"
     
-    # Enable PipeWire services for users
+    # Enable PipeWire services globally for all users
     systemctl --global enable pipewire.service
     systemctl --global enable pipewire-pulse.service
     systemctl --global enable wireplumber.service
