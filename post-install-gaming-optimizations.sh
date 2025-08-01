@@ -25,6 +25,11 @@ CONFIGURE_VM=true
 CONFIGURE_REALTIME=true
 CONFIGURE_SCHEDULING=true
 CONFIGURE_MEMORY=true
+INSTALL_GAMING_APPS=true
+INSTALL_DESKTOP=true
+INSTALL_GPU_DRIVERS=true
+INSTALL_AUDIO=true
+DESKTOP_ENV="hyprland"
 DRY_RUN=false
 
 log() {
@@ -91,7 +96,12 @@ OPTIONS:
     --no-realtime          Skip real-time priority configuration
     --no-scheduling        Skip process scheduling configuration
     --no-memory            Skip memory management configuration
-    --interactive          Interactive mode (ask before each step)
+    --no-gaming-apps       Skip gaming applications installation
+    --no-desktop           Skip desktop environment installation
+    --no-gpu-drivers       Skip GPU drivers installation
+    --no-audio             Skip audio system installation
+    --desktop ENV          Desktop environment (hyprland, kde, gnome, i3)
+    --interactive          Interactive mode (ask before each step) [NOT IMPLEMENTED]
 
 DESCRIPTION:
     Applies comprehensive gaming optimizations to an existing Arch Linux system:
@@ -108,10 +118,30 @@ DESCRIPTION:
     • Process scheduling (ananicy-cpp)
     • Memory management (ZRAM)
     
+    🎯 Gaming Software:
+    • Steam, Lutris, GameMode, MangoHud
+    • Wine, Bottles, Discord, OBS Studio
+    • Tailscale (VPN for gaming networks)
+    • Optimized Steam launcher
+    
+    🖥️ Desktop Environment:
+    • Hyprland (default), KDE, GNOME, i3
+    • Gaming-optimized configurations
+    
+    🎨 GPU Drivers:
+    • NVIDIA (proprietary + OpenCL)
+    • AMD (AMDGPU + Vulkan)
+    • Intel (integrated graphics)
+    
+    🔊 Audio System:
+    • PipeWire with low-latency configuration
+    • Gaming audio optimizations
+    
 EXAMPLES:
     sudo ./post-install-gaming-optimizations.sh
     sudo ./post-install-gaming-optimizations.sh --dry-run
-    sudo ./post-install-gaming-optimizations.sh --no-kernel --interactive
+    sudo ./post-install-gaming-optimizations.sh --desktop kde --no-kernel
+    sudo ./post-install-gaming-optimizations.sh --no-gaming-apps --no-desktop
 
 REQUIREMENTS:
     • Arch Linux system
@@ -170,8 +200,28 @@ parse_arguments() {
                 CONFIGURE_MEMORY=false
                 shift
                 ;;
+            --no-gaming-apps)
+                INSTALL_GAMING_APPS=false
+                shift
+                ;;
+            --no-desktop)
+                INSTALL_DESKTOP=false
+                shift
+                ;;
+            --no-gpu-drivers)
+                INSTALL_GPU_DRIVERS=false
+                shift
+                ;;
+            --no-audio)
+                INSTALL_AUDIO=false
+                shift
+                ;;
+            --desktop)
+                DESKTOP_ENV="$2"
+                shift 2
+                ;;
             --interactive)
-                INTERACTIVE=true
+                log "WARNING" "Interactive mode not yet implemented"
                 shift
                 ;;
             *)
@@ -250,7 +300,7 @@ install_gaming_kernel() {
     pacman -Sy
     
     # Check if linux-zen is available
-    if pacman -Ss linux-zen >/dev/null 2>&1; then
+    if pacman -Si linux-zen &>/dev/null; then
         log "INFO" "Installing linux-zen (gaming-optimized kernel)"
         pacman -S --needed --noconfirm linux-zen linux-zen-headers
         log "SUCCESS" "linux-zen kernel installed"
@@ -266,7 +316,7 @@ install_gaming_kernel() {
         preload
     
     # Try to install ananicy-cpp (may not be in official repos)
-    if pacman -Ss ananicy-cpp >/dev/null 2>&1; then
+    if pacman -Si ananicy-cpp &>/dev/null; then
         pacman -S --needed --noconfirm ananicy-cpp
         log "SUCCESS" "ananicy-cpp installed"
     else
@@ -288,6 +338,12 @@ configure_grub_gaming() {
     fi
     
     log "STEP" "Configuring GRUB for gaming performance"
+    
+    # Check if GRUB config exists
+    if [ ! -f /etc/default/grub ]; then
+        log "ERROR" "GRUB configuration file not found at /etc/default/grub"
+        return 1
+    fi
     
     # Backup original GRUB config
     cp /etc/default/grub /etc/default/grub.backup
@@ -387,7 +443,9 @@ EOF
 
 # Set performance governor
 if [ -d /sys/devices/system/cpu/cpu0/cpufreq ]; then
-    echo "performance" > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true
+    for gov in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+        [ -w "$gov" ] && echo "performance" > "$gov" 2>/dev/null || true
+    done
     echo "Gaming: CPU governor set to performance"
 fi
 
@@ -399,7 +457,9 @@ fi
 
 # Set CPU performance bias
 if [ -f /sys/devices/system/cpu/cpu0/power/energy_perf_bias ]; then
-    echo 0 > /sys/devices/system/cpu/cpu*/power/energy_perf_bias 2>/dev/null || true
+    for bias in /sys/devices/system/cpu/cpu*/power/energy_perf_bias; do
+        [ -w "$bias" ] && echo 0 > "$bias" 2>/dev/null || true
+    done
     echo "Gaming: CPU energy performance bias set to performance"
 fi
 
@@ -726,6 +786,10 @@ show_summary() {
     [ "$CONFIGURE_REALTIME" = true ] && echo "   ✅ Real-time priorities"
     [ "$CONFIGURE_SCHEDULING" = true ] && echo "   ✅ Process scheduling"
     [ "$CONFIGURE_MEMORY" = true ] && echo "   ✅ Memory management"
+    [ "$INSTALL_GPU_DRIVERS" = true ] && echo "   ✅ GPU drivers"
+    [ "$INSTALL_AUDIO" = true ] && echo "   ✅ Audio system (PipeWire)"
+    [ "$INSTALL_GAMING_APPS" = true ] && echo "   ✅ Gaming applications"
+    [ "$INSTALL_DESKTOP" = true ] && echo "   ✅ Desktop environment ($DESKTOP_ENV)"
     
     echo
     echo -e "${BLUE}📁 Files Created:${NC}"
@@ -753,6 +817,439 @@ show_summary() {
     fi
 }
 
+install_gaming_applications() {
+    if [ "$INSTALL_GAMING_APPS" = false ]; then
+        log "INFO" "Skipping gaming applications installation (--no-gaming-apps)"
+        return
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        log "DRY_RUN" "Would install gaming applications (Steam, Lutris, GameMode, etc.)"
+        return
+    fi
+    
+    log "STEP" "Installing gaming applications"
+    
+    # Core gaming packages
+    local gaming_packages=(
+        steam
+        lutris
+        gamemode
+        lib32-gamemode
+        mangohud
+        lib32-mangohud
+        wine
+        wine-gecko
+        wine-mono
+        winetricks
+        discord
+        obs-studio
+        goverlay
+        tailscale
+    )
+    
+    # Install packages that are available
+    local available_packages=()
+    for package in "${gaming_packages[@]}"; do
+        if pacman -Si "$package" &>/dev/null; then
+            available_packages+=("$package")
+        else
+            log "WARNING" "Package $package not available in repositories"
+        fi
+    done
+    
+    if [ ${#available_packages[@]} -gt 0 ]; then
+        pacman -S --needed --noconfirm "${available_packages[@]}"
+        log "SUCCESS" "Gaming applications installed: ${available_packages[*]}"
+    fi
+    
+    # Enable GameMode service
+    if command -v gamemoded >/dev/null 2>&1; then
+        systemctl --user enable gamemoded
+        log "SUCCESS" "GameMode service enabled"
+    fi
+    
+    # Enable Tailscale service
+    if command -v tailscale >/dev/null 2>&1; then
+        systemctl enable tailscaled
+        systemctl start tailscaled
+        log "SUCCESS" "Tailscale service enabled and started"
+        log "INFO" "Run 'sudo tailscale up' to connect to your Tailscale network"
+    fi
+    
+    # Configure Steam for optimal performance
+    if command -v steam >/dev/null 2>&1; then
+        # Create Steam launch options script
+        mkdir -p /usr/local/bin
+        cat > /usr/local/bin/steam-gaming << 'EOF'
+#!/bin/bash
+# Optimized Steam launcher
+
+# Set gaming environment variables
+export STEAM_RUNTIME_PREFER_HOST_LIBRARIES=0
+export STEAM_RUNTIME_HEAVY=1
+export RADV_PERFTEST=aco
+export MESA_GL_VERSION_OVERRIDE=4.6
+export __GL_THREADED_OPTIMIZATIONS=1
+export __GL_SYNC_TO_VBLANK=0
+
+# Launch Steam with GameMode
+exec gamemoderun steam "$@"
+EOF
+        chmod +x /usr/local/bin/steam-gaming
+        log "SUCCESS" "Optimized Steam launcher created"
+    fi
+    
+    log "SUCCESS" "Gaming applications installation completed"
+}
+
+install_desktop_environment() {
+    if [ "$INSTALL_DESKTOP" = false ]; then
+        log "INFO" "Skipping desktop environment installation (--no-desktop)"
+        return
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        log "DRY_RUN" "Would install desktop environment: $DESKTOP_ENV"
+        return
+    fi
+    
+    log "STEP" "Installing desktop environment: $DESKTOP_ENV"
+    
+    case "$DESKTOP_ENV" in
+        hyprland)
+            local hypr_packages=(
+                hyprland
+                waybar
+                wofi
+                foot
+                mako
+                grim
+                slurp
+                wl-clipboard
+                xdg-desktop-portal-hyprland
+                polkit-kde-agent
+                qt5-wayland
+                qt6-wayland
+                sddm
+            )
+            
+            # Install available packages
+            local available_packages=()
+            for package in "${hypr_packages[@]}"; do
+                if pacman -Si "$package" &>/dev/null; then
+                    available_packages+=("$package")
+                fi
+            done
+            
+            pacman -S --needed --noconfirm "${available_packages[@]}"
+            systemctl enable sddm
+            
+            # Create basic Hyprland config
+            mkdir -p /etc/skel/.config/hypr
+            cat > /etc/skel/.config/hypr/hyprland.conf << 'EOF'
+# Gaming-optimized Hyprland configuration
+
+monitor=,preferred,auto,1
+
+input {
+    kb_layout = us
+    follow_mouse = 1
+    sensitivity = 0
+}
+
+general {
+    gaps_in = 5
+    gaps_out = 10
+    border_size = 2
+    col.active_border = rgba(33ccffee) rgba(00ff99ee) 45deg
+    col.inactive_border = rgba(595959aa)
+    layout = dwindle
+}
+
+decoration {
+    rounding = 5
+    blur {
+        enabled = true
+        size = 3
+        passes = 1
+    }
+    drop_shadow = yes
+    shadow_range = 4
+    shadow_render_power = 3
+    col.shadow = rgba(1a1a1aee)
+}
+
+animations {
+    enabled = yes
+    bezier = myBezier, 0.05, 0.9, 0.1, 1.05
+    animation = windows, 1, 7, myBezier
+    animation = windowsOut, 1, 7, default, popin 80%
+    animation = border, 1, 10, default
+    animation = borderangle, 1, 8, default
+    animation = fade, 1, 7, default
+    animation = workspaces, 1, 6, default
+}
+
+# Gaming optimizations
+misc {
+    disable_hyprland_logo = true
+    disable_splash_rendering = true
+    mouse_move_enables_dpms = true
+    key_press_enables_dpms = true
+    vrr = 1
+}
+
+# Key bindings
+bind = SUPER, Return, exec, foot
+bind = SUPER, Q, killactive,
+bind = SUPER, M, exit,
+bind = SUPER, E, exec, thunar
+bind = SUPER, V, togglefloating,
+bind = SUPER, R, exec, wofi --show drun
+bind = SUPER, P, pseudo,
+bind = SUPER, J, togglesplit,
+
+# Gaming shortcuts
+bind = SUPER, G, exec, steam-gaming
+bind = SUPER, L, exec, lutris
+
+# Move focus
+bind = SUPER, left, movefocus, l
+bind = SUPER, right, movefocus, r
+bind = SUPER, up, movefocus, u
+bind = SUPER, down, movefocus, d
+
+# Switch workspaces
+bind = SUPER, 1, workspace, 1
+bind = SUPER, 2, workspace, 2
+bind = SUPER, 3, workspace, 3
+bind = SUPER, 4, workspace, 4
+bind = SUPER, 5, workspace, 5
+
+# Move active window to workspace
+bind = SUPER SHIFT, 1, movetoworkspace, 1
+bind = SUPER SHIFT, 2, movetoworkspace, 2
+bind = SUPER SHIFT, 3, movetoworkspace, 3
+bind = SUPER SHIFT, 4, movetoworkspace, 4
+bind = SUPER SHIFT, 5, movetoworkspace, 5
+
+# Window rules for gaming
+windowrule = fullscreen, ^(steam_app_).*
+windowrule = immediate, ^(steam_app_).*
+windowrule = fullscreen, ^(lutris).*
+windowrule = immediate, ^(cs2).*
+windowrule = immediate, ^(dota2).*
+EOF
+            
+            log "SUCCESS" "Hyprland installed with gaming optimizations"
+            ;;
+            
+        kde)
+            pacman -S --needed --noconfirm plasma-meta kde-applications sddm
+            systemctl enable sddm
+            log "SUCCESS" "KDE Plasma installed"
+            ;;
+            
+        gnome)
+            pacman -S --needed --noconfirm gnome gnome-extra gdm
+            systemctl enable gdm
+            log "SUCCESS" "GNOME installed"
+            ;;
+            
+        i3)
+            local i3_packages=(
+                i3-wm
+                i3status
+                i3lock
+                dmenu
+                xorg-server
+                xorg-xinit
+                lightdm
+                lightdm-gtk-greeter
+            )
+            pacman -S --needed --noconfirm "${i3_packages[@]}"
+            systemctl enable lightdm
+            log "SUCCESS" "i3 window manager installed"
+            ;;
+            
+        *)
+            log "ERROR" "Unsupported desktop environment: $DESKTOP_ENV"
+            log "INFO" "Supported: hyprland, kde, gnome, i3"
+            return 1
+            ;;
+    esac
+    
+    log "SUCCESS" "Desktop environment installation completed"
+}
+
+install_gpu_drivers() {
+    if [ "$INSTALL_GPU_DRIVERS" = false ]; then
+        log "INFO" "Skipping GPU drivers installation (--no-gpu-drivers)"
+        return
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        log "DRY_RUN" "Would install GPU drivers based on detected hardware"
+        return
+    fi
+    
+    log "STEP" "Installing GPU drivers"
+    
+    # Detect GPU hardware
+    local has_nvidia=false
+    local has_amd=false
+    local has_intel=false
+    
+    if lspci | grep -i nvidia >/dev/null 2>&1; then
+        has_nvidia=true
+        log "INFO" "NVIDIA GPU detected"
+    fi
+    
+    if lspci | grep -i "amd\|ati" >/dev/null 2>&1; then
+        has_amd=true
+        log "INFO" "AMD GPU detected"
+    fi
+    
+    if lspci | grep -i "intel.*graphics\|intel.*display" >/dev/null 2>&1; then
+        has_intel=true
+        log "INFO" "Intel GPU detected"
+    fi
+    
+    # Install NVIDIA drivers
+    if [ "$has_nvidia" = true ]; then
+        log "INFO" "Installing NVIDIA drivers"
+        local nvidia_packages=(
+            nvidia
+            nvidia-utils
+            lib32-nvidia-utils
+            nvidia-settings
+            opencl-nvidia
+            lib32-opencl-nvidia
+        )
+        
+        pacman -S --needed --noconfirm "${nvidia_packages[@]}"
+        log "SUCCESS" "NVIDIA drivers installed"
+    fi
+    
+    # Install AMD drivers
+    if [ "$has_amd" = true ]; then
+        log "INFO" "Installing AMD drivers"
+        local amd_packages=(
+            mesa
+            lib32-mesa
+            xf86-video-amdgpu
+            vulkan-radeon
+            lib32-vulkan-radeon
+            libva-mesa-driver
+            lib32-libva-mesa-driver
+            mesa-vdpau
+            lib32-mesa-vdpau
+        )
+        
+        pacman -S --needed --noconfirm "${amd_packages[@]}"
+        log "SUCCESS" "AMD drivers installed"
+    fi
+    
+    # Install Intel drivers
+    if [ "$has_intel" = true ]; then
+        log "INFO" "Installing Intel drivers"
+        local intel_packages=(
+            mesa
+            lib32-mesa
+            vulkan-intel
+            lib32-vulkan-intel
+            intel-media-driver
+            libva-intel-driver
+        )
+        
+        pacman -S --needed --noconfirm "${intel_packages[@]}"
+        log "SUCCESS" "Intel drivers installed"
+    fi
+    
+    # Install common graphics packages
+    local common_packages=(
+        vulkan-tools
+        vulkan-validation-layers
+        lib32-vulkan-validation-layers
+        mesa-demos
+    )
+    
+    pacman -S --needed --noconfirm "${common_packages[@]}"
+    
+    log "SUCCESS" "GPU drivers installation completed"
+}
+
+install_audio_system() {
+    if [ "$INSTALL_AUDIO" = false ]; then
+        log "INFO" "Skipping audio system installation (--no-audio)"
+        return
+    fi
+    
+    if [ "$DRY_RUN" = true ]; then
+        log "DRY_RUN" "Would install PipeWire audio system with gaming optimizations"
+        return
+    fi
+    
+    log "STEP" "Installing audio system"
+    
+    # Install PipeWire
+    local audio_packages=(
+        pipewire
+        lib32-pipewire
+        wireplumber
+        pipewire-alsa
+        pipewire-pulse
+        pipewire-jack
+        lib32-pipewire-jack
+        pavucontrol
+    )
+    
+    pacman -S --needed --noconfirm "${audio_packages[@]}"
+    
+    # Enable PipeWire services for users
+    systemctl --global enable pipewire.service
+    systemctl --global enable pipewire-pulse.service
+    systemctl --global enable wireplumber.service
+    
+    # Create gaming audio configuration
+    mkdir -p /etc/pipewire/pipewire.conf.d
+    cat > /etc/pipewire/pipewire.conf.d/99-gaming.conf << 'EOF'
+# Gaming audio optimizations
+context.properties = {
+    default.clock.rate = 48000
+    default.clock.quantum = 64
+    default.clock.min-quantum = 32
+    default.clock.max-quantum = 2048
+    core.daemon = true
+    core.name = pipewire-0
+}
+
+context.spa-libs = {
+    audio.convert.* = audioconvert/libspa-audioconvert
+    support.* = support/libspa-support
+}
+
+context.modules = [
+    { name = libpipewire-module-rt
+        args = {
+            nice.level = -11
+            rt.prio = 88
+            rt.time.soft = 200000
+            rt.time.hard = 200000
+        }
+        flags = [ ifexists nofail ]
+    }
+    { name = libpipewire-module-protocol-native }
+    { name = libpipewire-module-client-node }
+    { name = libpipewire-module-adapter }
+    { name = libpipewire-module-link-factory }
+]
+EOF
+    
+    log "SUCCESS" "PipeWire audio system installed with gaming optimizations"
+}
+
 main() {
     parse_arguments "$@"
     show_banner
@@ -769,6 +1266,10 @@ main() {
     configure_realtime
     configure_process_scheduling
     configure_memory_management
+    install_gpu_drivers
+    install_audio_system
+    install_gaming_applications
+    install_desktop_environment
     
     show_summary
 }
