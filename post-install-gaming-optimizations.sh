@@ -217,6 +217,10 @@ parse_arguments() {
                 shift
                 ;;
             --desktop)
+                if [[ -z "$2" ]]; then
+                    log "ERROR" "--desktop requires a value (hyprland, kde, gnome, i3)"
+                    exit 1
+                fi
                 DESKTOP_ENV="$2"
                 shift 2
                 ;;
@@ -399,9 +403,9 @@ configure_grub_gaming() {
     # Join parameters
     local params_string=$(IFS=' '; echo "${gaming_params[*]}")
     
-    # Update GRUB configuration
+    # Update GRUB configuration (using | as delimiter to avoid issues with / in parameters)
     if grep -q "GRUB_CMDLINE_LINUX_DEFAULT=" /etc/default/grub; then
-        sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"/" /etc/default/grub
+        sed -i "s|GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"|" /etc/default/grub
     else
         echo "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet $params_string\"" >> /etc/default/grub
     fi
@@ -755,7 +759,13 @@ modprobe zram 2>/dev/null || true
 if [ ! -e /dev/zram0 ] && [ -w /sys/class/zram-control/hot_add ]; then
     echo 1 > /sys/class/zram-control/hot_add 2>/dev/null || true
 fi
-echo $ZRAM_SIZE > /sys/block/zram0/disksize 2>/dev/null || true
+# Wait a moment for device to be ready and set size
+for i in {1..5}; do
+    if [ -e /dev/zram0 ] && echo $ZRAM_SIZE > /sys/block/zram0/disksize 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
 mkswap $ZRAM_DEVICE >/dev/null 2>&1 || true
 swapon $ZRAM_DEVICE -p 10 >/dev/null 2>&1 || true
 
@@ -873,14 +883,13 @@ install_gaming_applications() {
     
     # Enable GameMode service globally (for all users)
     if command -v gamemoded >/dev/null 2>&1; then
-        systemctl --global enable gamemoded
+        systemctl --global enable gamemoded.service
         log "SUCCESS" "GameMode service enabled globally"
     fi
     
     # Enable Tailscale service
     if command -v tailscale >/dev/null 2>&1; then
-        systemctl enable tailscaled
-        if systemctl start tailscaled; then
+        if systemctl enable --now tailscaled.service; then
             log "SUCCESS" "Tailscale service enabled and started"
         else
             log "WARNING" "Tailscale service enabled but failed to start (may need reboot)"
