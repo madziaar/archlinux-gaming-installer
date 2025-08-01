@@ -972,7 +972,7 @@ install_desktop_environment() {
             else
                 log "WARNING" "No Hyprland packages available in repositories"
             fi
-            systemctl enable sddm
+            systemctl enable sddm.service || log "WARNING" "Failed to enable SDDM service"
             
             # Create basic Hyprland config
             mkdir -p /etc/skel/.config/hypr
@@ -1076,7 +1076,7 @@ EOF
             
         kde)
             if pacman -S --needed --noconfirm plasma-meta kde-applications sddm; then
-                systemctl enable sddm
+                systemctl enable sddm.service || log "WARNING" "Failed to enable SDDM service"
                 log "SUCCESS" "KDE Plasma installed"
             else
                 log "WARNING" "Failed to install KDE Plasma packages"
@@ -1085,7 +1085,7 @@ EOF
             
         gnome)
             if pacman -S --needed --noconfirm gnome gnome-extra gdm; then
-                systemctl enable gdm
+                systemctl enable gdm.service || log "WARNING" "Failed to enable GDM service"
                 log "SUCCESS" "GNOME installed"
             else
                 log "WARNING" "Failed to install GNOME packages"
@@ -1104,7 +1104,7 @@ EOF
                 lightdm-gtk-greeter
             )
             if pacman -S --needed --noconfirm "${i3_packages[@]}"; then
-                systemctl enable lightdm
+                systemctl enable lightdm.service || log "WARNING" "Failed to enable LightDM service"
                 log "SUCCESS" "i3 window manager installed"
             else
                 log "WARNING" "Failed to install i3 packages"
