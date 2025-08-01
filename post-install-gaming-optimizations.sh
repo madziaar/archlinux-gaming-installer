@@ -300,8 +300,9 @@ install_gaming_kernel() {
     
     log "STEP" "Installing gaming-optimized kernel"
     
-    # Update package database and system
-    pacman -Syu --needed --noconfirm
+    # Update package database (full system upgrade)
+    # Note: This performs a full system upgrade which may take time
+    pacman -Syu --noconfirm
     
     # Check if linux-zen is available
     if pacman -Si linux-zen &>/dev/null; then
@@ -346,7 +347,8 @@ configure_grub_gaming() {
     # Check if GRUB config exists
     if [ ! -f /etc/default/grub ]; then
         log "ERROR" "GRUB configuration file not found at /etc/default/grub"
-        return 1
+        log "WARNING" "Skipping GRUB configuration"
+        return 0
     fi
     
     # Backup original GRUB config
@@ -483,6 +485,7 @@ echo "Gaming CPU optimizations applied"
 EOF
     
     chmod +x /usr/local/bin/gaming-cpu-setup.sh
+    systemctl daemon-reload
     systemctl enable gaming-cpu-performance.service
     
     log "SUCCESS" "CPU performance service configured"
@@ -553,6 +556,7 @@ echo "Gaming I/O scheduler optimizations applied"
 EOF
     
     chmod +x /usr/local/bin/gaming-io-setup.sh
+    systemctl daemon-reload
     systemctl enable gaming-io-scheduler.service
     
     log "SUCCESS" "I/O scheduler optimizations configured"
@@ -782,6 +786,7 @@ echo "Gaming: ZRAM disabled"
 EOF
         
         chmod +x /usr/local/bin/gaming-zram-*.sh
+        systemctl daemon-reload
         systemctl enable zram-gaming.service
         
         log "SUCCESS" "ZRAM configured for gaming"
@@ -1096,7 +1101,8 @@ EOF
         *)
             log "ERROR" "Unsupported desktop environment: $DESKTOP_ENV"
             log "INFO" "Supported: hyprland, kde, gnome, i3"
-            return 1
+            log "WARNING" "Skipping desktop environment installation"
+            return 0
             ;;
     esac
     
